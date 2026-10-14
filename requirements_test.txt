@@ -1,0 +1,5 @@
+homeassistant==2026.2.3
+pytest-homeassistant-custom-component==0.13.316
+aioresponses==0.7.9
+habluetooth==5.8.0
+bluetooth-data-tools==1.28.4

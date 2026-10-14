@@ -1,0 +1,61 @@
+{
+  "title": "StayFit",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to StayFit",
+        "description": "Enter the email address and PIN used by your StayFit account.",
+        "data": {
+          "username": "Username",
+          "password": "Password"
+        },
+        "data_description": {
+          "username": "Your StayFit account email address",
+          "password": "Your StayFit account PIN"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Reconnect StayFit",
+        "description": "The credentials for {account} are no longer valid. Enter them again to reconnect.",
+        "data": {
+          "username": "Username",
+          "password": "Password"
+        },
+        "data_description": {
+          "username": "Your StayFit account email address",
+          "password": "Your StayFit account PIN"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Unable to connect to StayFit. Check your internet connection and try again.",
+      "invalid_auth": "The username or password is incorrect.",
+      "rate_limited": "StayFit has temporarily blocked login attempts. Please try again later.",
+      "wrong_account": "These credentials belong to a different StayFit account.",
+      "unknown": "Unexpected response from StayFit. Please try again."
+    },
+    "abort": {
+      "already_configured": "This StayFit account is already configured.",
+      "reauth_successful": "StayFit was reconnected successfully.",
+      "unique_id_mismatch": "These credentials belong to a different StayFit account."
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "subscription_active": {
+        "name": "Subscription active"
+      },
+      "active_subscription_freeze": {
+        "name": "Active subscription freeze"
+      }
+    },
+    "sensor": {
+      "subscription_expire_date": {
+        "name": "Subscription expire date"
+      },
+      "subscription_type": {
+        "name": "Subscription type"
+      }
+    }
+  }
+}
