@@ -1,0 +1,51 @@
+freeze_subscription:
+  name: Freeze subscription
+  description: Freeze a subscription for personal reasons. Existing StayFit eligibility rules apply.
+  fields:
+    config_entry_id:
+      name: Account
+      description: The StayFit account to change.
+      required: true
+      selector:
+        config_entry:
+          integration: stayfit
+    days:
+      name: Days
+      description: Number of days to freeze, subject to the subscription's remaining allowance.
+      required: true
+      selector:
+        number:
+          min: 1
+          step: 1
+          mode: box
+    start_date:
+      name: Start date
+      description: First frozen day. Defaults to today in Home Assistant's time zone.
+      selector:
+        date:
+    subscription_id:
+      name: Subscription ID
+      description: Optional API subscription ID. Defaults to the account's primary subscription.
+      selector:
+        text:
+unfreeze_subscription:
+  name: Unfreeze subscription
+  description: Stop a freeze immediately. This can change the subscription expiration date.
+  fields:
+    config_entry_id:
+      name: Account
+      description: The StayFit account to change.
+      required: true
+      selector:
+        config_entry:
+          integration: stayfit
+    subscription_id:
+      name: Subscription ID
+      description: Optional API subscription ID. Defaults to the account's primary subscription.
+      selector:
+        text:
+    freeze_id:
+      name: Freeze ID
+      description: Optional API freeze ID for an active or scheduled stoppable freeze. Defaults to the single active stoppable freeze.
+      selector:
+        text:

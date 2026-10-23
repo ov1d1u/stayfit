@@ -23,12 +23,15 @@ class StayFitFreeze:
 
     date_start: date | None
     date_end: date | None
-    days: int
+    days: int | None
+    freeze_id: str | None = None
+    can_stop: bool = False
 
     def is_active(self, today: date) -> bool:
         """Return whether the freeze is active on the supplied date."""
         return (
-            self.days > 0
+            self.days is not None
+            and self.days > 0
             and self.date_start is not None
             and self.date_end is not None
             and self.date_start <= today < self.date_end
@@ -45,6 +48,13 @@ class StayFitMembership:
     date_end: date | None
     flag_status: str
     freezes: tuple[StayFitFreeze, ...]
+    api_membership_id: str | None = None
+    max_freeze_period: int | None = None
+    total_freeze: int | None = None
+    freeze_use_times: int | None = None
+    count_freeze: int | None = None
+    freeze_add_interval: int | None = None
+    recurrent: bool | None = None
 
     def covers(self, today: date) -> bool:
         """Return whether today falls inside the membership period."""
@@ -83,6 +93,24 @@ def parse_date(value: Any) -> date | None:
         return None
 
 
+def parse_integer(value: Any) -> int | None:
+    """Parse integer API fields without guessing missing or malformed rules."""
+    if isinstance(value, bool) or not isinstance(value, (str, int)):
+        return None
+    try:
+        return int(value)
+    except ValueError:
+        return None
+
+
+def _parse_id(value: Any) -> str | None:
+    """Retain real, nonempty API identifiers, never synthetic ones."""
+    if isinstance(value, bool) or not isinstance(value, (str, int)):
+        return None
+    result = str(value).strip()
+    return result if result and result != "0" else None
+
+
 def _normalise_objects(
     value: Any, *, marker_fields: frozenset[str]
 ) -> list[dict[str, Any]]:
@@ -98,22 +126,18 @@ def _normalise_objects(
 
 def parse_freezes(value: Any) -> tuple[StayFitFreeze, ...]:
     """Parse the API's inconsistent freeze representation."""
-    freezes: list[StayFitFreeze] = []
-    for item in _normalise_objects(
-        value, marker_fields=frozenset({"date_start", "date_end", "days"})
-    ):
-        try:
-            days = int(item.get("days", 0))
-        except (TypeError, ValueError):
-            days = 0
-        freezes.append(
-            StayFitFreeze(
-                date_start=parse_date(item.get("date_start")),
-                date_end=parse_date(item.get("date_end")),
-                days=days,
-            )
+    return tuple(
+        StayFitFreeze(
+            date_start=parse_date(item.get("date_start")),
+            date_end=parse_date(item.get("date_end")),
+            days=parse_integer(item.get("days")),
+            freeze_id=_parse_id(item.get("mmfid")),
+            can_stop=parse_integer(item.get("can_stop")) == 1,
         )
-    return tuple(freezes)
+        for item in _normalise_objects(
+            value, marker_fields=frozenset({"date_start", "date_end", "days"})
+        )
+    )
 
 
 def parse_memberships(value: Any) -> tuple[StayFitMembership, ...]:
@@ -137,6 +161,17 @@ def parse_memberships(value: Any) -> tuple[StayFitMembership, ...]:
                 date_end=parse_date(item.get("date_end")),
                 flag_status=str(item.get("flag_status", "")),
                 freezes=parse_freezes(item.get("freeze")),
+                api_membership_id=_parse_id(item.get("mmid")),
+                max_freeze_period=parse_integer(item.get("max_freeze_period")),
+                total_freeze=parse_integer(item.get("total_freeze")),
+                freeze_use_times=parse_integer(item.get("freeze_use_times")),
+                count_freeze=parse_integer(item.get("count_freeze")),
+                freeze_add_interval=parse_integer(item.get("freeze_add_interval")),
+                recurrent=(
+                    bool(value)
+                    if (value := parse_integer(item.get("recurrent"))) in (0, 1)
+                    else None
+                ),
             )
         )
     return tuple(memberships)

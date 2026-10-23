@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any
 
 from homeassistant.components.binary_sensor import (
     BinarySensorEntity,
@@ -66,3 +67,29 @@ class StayFitBinarySensor(StayFitEntity, BinarySensorEntity):
     def is_on(self) -> bool:
         """Return the binary sensor state."""
         return self.entity_description.value_fn(self.coordinator.data)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """Expose freeze identifiers and eligibility for explicit action calls."""
+        if self.entity_description.key != "active_subscription_freeze":
+            return None
+        primary = self.coordinator.data.primary
+        return {
+            "subscription_id": primary.api_membership_id if primary else None,
+            "freezes": [
+                {
+                    "freeze_id": freeze.freeze_id,
+                    "date_start": (
+                        freeze.date_start.isoformat() if freeze.date_start else None
+                    ),
+                    "date_end": freeze.date_end.isoformat()
+                    if freeze.date_end
+                    else None,
+                    "days": freeze.days,
+                    "can_stop": freeze.can_stop,
+                }
+                for freeze in primary.freezes
+            ]
+            if primary
+            else [],
+        }

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import Mapping
+from datetime import date
 from typing import Any
 
 from aiohttp import ClientError, ClientSession
@@ -25,6 +26,10 @@ class StayFitConnectionError(StayFitError):
 
 class StayFitAuthenticationError(StayFitError):
     """The supplied credentials or token are invalid."""
+
+
+class StayFitTimeoutError(StayFitConnectionError):
+    """A request timed out; a write may already have been applied."""
 
 
 class StayFitRateLimitError(StayFitError):
@@ -62,6 +67,7 @@ class StayFitApiClient:
         params: Mapping[str, str] | None = None,
         data: Mapping[str, str],
         authenticated: bool = False,
+        json_query: bool = True,
     ) -> dict[str, Any]:
         headers = {"Content-Type": "application/x-www-form-urlencoded; charset=UTF-8"}
         if authenticated:
@@ -71,22 +77,26 @@ class StayFitApiClient:
 
         try:
             async with asyncio.timeout(15):
-                response = await self._session.post(
-                    f"{API_BASE_URL}/{endpoint}?json",
+                async with self._session.post(
+                    f"{API_BASE_URL}/{endpoint}" + ("?json" if json_query else ""),
                     params=params,
                     data=data,
                     headers=headers,
-                )
-                if response.status == HTTP_TOO_MANY_REQUESTS:
-                    raise StayFitRateLimitError
-                response.raise_for_status()
-                try:
-                    payload = await response.json(content_type=None)
-                except (json.JSONDecodeError, ValueError, TypeError) as err:
-                    raise StayFitInvalidResponseError from err
+                ) as response:
+                    if response.status == HTTP_TOO_MANY_REQUESTS:
+                        raise StayFitRateLimitError
+                    if response.status in (401, 403):
+                        raise StayFitAuthenticationError
+                    response.raise_for_status()
+                    try:
+                        payload = await response.json(content_type=None)
+                    except (json.JSONDecodeError, ValueError, TypeError) as err:
+                        raise StayFitInvalidResponseError from err
         except StayFitError:
             raise
-        except (TimeoutError, ClientError) as err:
+        except TimeoutError as err:
+            raise StayFitTimeoutError from err
+        except ClientError as err:
             raise StayFitConnectionError from err
 
         if not isinstance(payload, dict):
@@ -96,11 +106,37 @@ class StayFitApiClient:
     @staticmethod
     def _error_code(payload: Mapping[str, Any]) -> str | None:
         error = payload.get("error")
-        if error in (None, "", {}, []):
+        if error in (None, "", {}, [], False):
             return None
+        if isinstance(error, dict):
+            return (
+                ",".join(
+                    value
+                    for item in error.values()
+                    if (value := StayFitApiClient._error_code({"error": item}))
+                )
+                or None
+            )
         if isinstance(error, list):
-            return ",".join(str(item) for item in error)
+            return (
+                ",".join(
+                    value
+                    for item in error
+                    if (value := StayFitApiClient._error_code({"error": item}))
+                )
+                or None
+            )
         return str(error)
+
+    def _raise_response_error(self, payload: Mapping[str, Any]) -> None:
+        """Classify authenticated API errors, including structured errors."""
+        if error := self._error_code(payload):
+            codes = error.split(",")
+            if "ERROR_LOGIN_MEMBER" in codes:
+                raise StayFitAuthenticationError
+            if "ERROR_LOGIN_TOO_MANY_ATTEMPTS" in codes:
+                raise StayFitRateLimitError
+            raise StayFitApiError(error)
 
     async def async_login(self, username: str, password: str) -> StayFitAccount:
         """Authenticate and return stable member metadata."""
@@ -148,10 +184,41 @@ class StayFitApiClient:
             authenticated=True,
         )
         error = self._error_code(payload)
-        if error == "ERROR_LOGIN_MEMBER":
-            raise StayFitAuthenticationError
         if error in {"MSG_NO_MEMBERSHIPS_FOUND", "NO_MEMBERSHIPS"}:
             return ()
-        if error:
-            raise StayFitApiError(error)
+        self._raise_response_error(payload)
+        if "membership" not in payload:
+            raise StayFitInvalidResponseError
         return parse_memberships(payload.get("membership"))
+
+    async def async_freeze_subscription(
+        self, subscription_id: str, start_date: date, days: int
+    ) -> None:
+        """Create a personal freeze using the Android app's request contract."""
+        payload = await self._post(
+            "freeze-membership.php",
+            data={
+                "project": API_PROJECT,
+                "lang": API_LANGUAGE_ID,
+                "mmid": subscription_id,
+                "reason": "2",
+                "date_start": start_date.isoformat(),
+                "days": str(days),
+            },
+            authenticated=True,
+        )
+        self._raise_response_error(payload)
+        if "freeze" not in payload or payload["freeze"] is None:
+            raise StayFitInvalidResponseError
+
+    async def async_unfreeze_subscription(self, freeze_id: str) -> None:
+        """Stop one freeze using the Android app's request contract."""
+        payload = await self._post(
+            "stop-freeze.php",
+            data={"project": API_PROJECT, "mmfid": freeze_id},
+            authenticated=True,
+            json_query=False,
+        )
+        self._raise_response_error(payload)
+        if "success" not in payload or payload["success"] is None:
+            raise StayFitInvalidResponseError

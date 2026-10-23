@@ -1,6 +1,7 @@
 """Tests for the StayFit API client."""
 
 import re
+from datetime import date
 
 import pytest
 from aiohttp import ClientSession
@@ -8,10 +9,12 @@ from aioresponses import aioresponses
 
 from custom_components.stayfit.api import (
     StayFitApiClient,
+    StayFitApiError,
     StayFitAuthenticationError,
     StayFitConnectionError,
     StayFitInvalidResponseError,
     StayFitRateLimitError,
+    StayFitTimeoutError,
 )
 from custom_components.stayfit.const import API_PROJECT
 
@@ -138,3 +141,112 @@ async def test_network_failure_is_classified() -> None:
             )
             with pytest.raises(StayFitConnectionError):
                 await StayFitApiClient(session).async_login("user@example.com", "1234")
+
+
+@pytest.mark.parametrize("operation", ["freeze", "unfreeze"])
+async def test_write_request_contract(operation) -> None:
+    """Both mutations exactly match app URLs, headers and form bodies."""
+    url = (
+        "https://api.upfit.cloud/freeze-membership.php?json"
+        if operation == "freeze"
+        else "https://api.upfit.cloud/stop-freeze.php"
+    )
+    payload = (
+        {"freeze": {"date_end_new": "2027-01-07"}}
+        if operation == "freeze"
+        else {"success": 1}
+    )
+    async with ClientSession() as session:
+        with aioresponses() as mocked:
+            mocked.post(url, payload=payload)
+            client = StayFitApiClient(session, token="mock-token")
+            if operation == "freeze":
+                await client.async_freeze_subscription("123", date(2026, 11, 1), 7)
+            else:
+                await client.async_unfreeze_subscription("456")
+
+            assert len(mocked.requests) == 1
+            (method, actual_url), [request] = next(iter(mocked.requests.items()))
+            assert method == "POST"
+            assert actual_url.path == url.split("upfit.cloud")[1].split("?")[0]
+            assert ("json" in actual_url.query) is (operation == "freeze")
+            assert request.kwargs["headers"] == {
+                "Auth": "Bearer mock-token",
+                "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+            }
+            expected = {"project": API_PROJECT, "mmfid": "456"}
+            if operation == "freeze":
+                expected = {
+                    "project": API_PROJECT,
+                    "lang": "2",
+                    "mmid": "123",
+                    "reason": "2",
+                    "date_start": "2026-11-01",
+                    "days": "7",
+                }
+            assert request.kwargs["data"] == expected
+
+
+@pytest.mark.parametrize("operation", ["freeze", "unfreeze"])
+@pytest.mark.parametrize(
+    ("payload", "exception"),
+    [
+        ({"error": "ERROR_LOGIN_MEMBER"}, StayFitAuthenticationError),
+        ({"error": {"auth": ["ERROR_LOGIN_MEMBER"]}}, StayFitAuthenticationError),
+        ({"error": ["ERROR_LOGIN_TOO_MANY_ATTEMPTS"]}, StayFitRateLimitError),
+        ({"error": {"period": "ERROR_FREEZE_PERIOD_OVERLAPS"}}, StayFitApiError),
+        ({"error": ["REJECTED", "INVALID"]}, StayFitApiError),
+        ({}, StayFitInvalidResponseError),
+        ({"freeze": None, "success": None}, StayFitInvalidResponseError),
+        ([], StayFitInvalidResponseError),
+    ],
+)
+async def test_write_response_errors(operation, payload, exception) -> None:
+    """Malformed and structured error responses cannot be treated as success."""
+    async with ClientSession() as session:
+        with aioresponses() as mocked:
+            mocked.post(re.compile(r"https://api\.upfit\.cloud/.*"), payload=payload)
+            client = StayFitApiClient(session, token="mock-token")
+            request = (
+                client.async_freeze_subscription("123", date(2026, 11, 1), 7)
+                if operation == "freeze"
+                else client.async_unfreeze_subscription("456")
+            )
+            with pytest.raises(exception):
+                await request
+            assert sum(len(calls) for calls in mocked.requests.values()) == 1
+
+
+@pytest.mark.parametrize(
+    ("status", "exception"),
+    [
+        (401, StayFitAuthenticationError),
+        (403, StayFitAuthenticationError),
+        (429, StayFitRateLimitError),
+        (500, StayFitConnectionError),
+    ],
+)
+async def test_write_http_errors(status, exception) -> None:
+    """Classify HTTP failures without retrying the subscription write."""
+    async with ClientSession() as session:
+        with aioresponses() as mocked:
+            mocked.post("https://api.upfit.cloud/stop-freeze.php", status=status)
+            with pytest.raises(exception):
+                await StayFitApiClient(
+                    session, token="mock-token"
+                ).async_unfreeze_subscription("456")
+            assert sum(len(calls) for calls in mocked.requests.values()) == 1
+
+
+async def test_write_timeout_is_not_retried() -> None:
+    """A timeout retains its type so callers can report an uncertain outcome."""
+    async with ClientSession() as session:
+        with aioresponses() as mocked:
+            mocked.post(
+                "https://api.upfit.cloud/stop-freeze.php", exception=TimeoutError()
+            )
+            with pytest.raises(StayFitTimeoutError):
+                await StayFitApiClient(
+                    session, token="mock-token"
+                ).async_unfreeze_subscription("456")
+            assert sum(len(calls) for calls in mocked.requests.values()) == 1

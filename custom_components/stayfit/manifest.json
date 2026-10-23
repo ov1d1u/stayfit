@@ -1,8 +1,11 @@
 {
   "domain": "stayfit",
   "name": "StayFit",
+  "codeowners": ["@ov1d1u"],
   "config_flow": true,
+  "documentation": "https://github.com/ov1d1u/stayfit",
   "integration_type": "service",
   "iot_class": "cloud_polling",
-  "version": "0.1.0"
+  "issue_tracker": "https://github.com/ov1d1u/stayfit/issues",
+  "version": "0.2.0"
 }

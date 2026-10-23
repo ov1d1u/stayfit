@@ -1,4 +1,6 @@
 {
   "name": "StayFit",
-  "render_readme": true
+  "filename": "stayfit.zip",
+  "render_readme": true,
+  "zip_release": true
 }

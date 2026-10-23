@@ -8,10 +8,12 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.typing import ConfigType
 
 from .api import StayFitApiClient
 from .const import CONF_DISPLAY_NAME, CONF_MEMBER_ID, CONF_TOKEN
 from .coordinator import StayFitDataUpdateCoordinator
+from .services import async_setup_services
 
 PLATFORMS: list[Platform] = [Platform.BINARY_SENSOR, Platform.SENSOR]
 
@@ -26,6 +28,12 @@ class StayFitRuntimeData:
 
 
 type StayFitConfigEntry = ConfigEntry[StayFitRuntimeData]
+
+
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    """Register account actions when the integration loads."""
+    async_setup_services(hass)
+    return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: StayFitConfigEntry) -> bool:

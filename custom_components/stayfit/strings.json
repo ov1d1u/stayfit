@@ -40,6 +40,113 @@
       "unique_id_mismatch": "These credentials belong to a different StayFit account."
     }
   },
+  "services": {
+    "freeze_subscription": {
+      "name": "Freeze subscription",
+      "description": "Freeze a subscription for personal reasons. Existing StayFit eligibility rules apply.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Account",
+          "description": "The StayFit account to change."
+        },
+        "subscription_id": {
+          "name": "Subscription ID",
+          "description": "Optional API subscription ID. Defaults to the account's primary subscription."
+        },
+        "days": {
+          "name": "Days",
+          "description": "Number of days to freeze, subject to the subscription's remaining allowance."
+        },
+        "start_date": {
+          "name": "Start date",
+          "description": "First frozen day. Defaults to today in Home Assistant's time zone."
+        }
+      }
+    },
+    "unfreeze_subscription": {
+      "name": "Unfreeze subscription",
+      "description": "Stop a freeze immediately. This can change the subscription expiration date.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Account",
+          "description": "The StayFit account to change."
+        },
+        "subscription_id": {
+          "name": "Subscription ID",
+          "description": "Optional API subscription ID. Defaults to the account's primary subscription."
+        },
+        "freeze_id": {
+          "name": "Freeze ID",
+          "description": "Optional API freeze ID for an active or scheduled stoppable freeze. Defaults to the single active stoppable freeze."
+        }
+      }
+    }
+  },
+  "exceptions": {
+    "entry_not_found": {
+      "message": "The selected account does not exist or does not belong to StayFit."
+    },
+    "entry_not_loaded": {
+      "message": "This StayFit account is not loaded. Reconnect or enable it before using this action."
+    },
+    "subscription_not_found": {
+      "message": "The subscription was not found in this StayFit account. Refresh and check the subscription ID."
+    },
+    "missing_subscription_id": {
+      "message": "StayFit did not return a real subscription ID. The subscription cannot be changed."
+    },
+    "invalid_membership_dates": {
+      "message": "StayFit returned invalid subscription dates. Refresh the account before trying again."
+    },
+    "eligibility_unknown": {
+      "message": "StayFit did not return a valid value for {field}. Refresh the account or use the StayFit app to check eligibility."
+    },
+    "freeze_days_exceeded": {
+      "message": "The requested days exceed the subscription's remaining freeze allowance."
+    },
+    "freeze_uses_exhausted": {
+      "message": "This subscription has no personal freeze uses remaining."
+    },
+    "recurring_start_date": {
+      "message": "A freeze for a recurring subscription must start today."
+    },
+    "invalid_start_date": {
+      "message": "The freeze start date is outside the subscription period or the permitted advance-notice/backdating window."
+    },
+    "overlapping_freeze": {
+      "message": "The requested freeze overlaps an existing freeze."
+    },
+    "freeze_not_found": {
+      "message": "The freeze ID was not found on the selected subscription."
+    },
+    "freeze_not_stoppable": {
+      "message": "There is no eligible freeze to stop. Only non-cancelled active or explicitly selected scheduled freezes with StayFit's stop permission can be stopped."
+    },
+    "ambiguous_freeze": {
+      "message": "Several active freezes can be stopped. Provide the freeze ID to choose one."
+    },
+    "missing_freeze_id": {
+      "message": "StayFit did not return an ID for this freeze. It cannot be stopped."
+    },
+    "refresh_failed": {
+      "message": "Unable to refresh StayFit eligibility. No subscription change was requested."
+    },
+    "auth_required": {
+      "message": "StayFit authentication expired. Reauthenticate the account before trying again."
+    },
+    "action_rate_limited": {
+      "message": "StayFit rejected the action because of a request limit. Try again later."
+    },
+    "api_rejected": {
+      "message": "StayFit rejected the action: {reason}"
+    },
+    "write_uncertain": {
+      "message": "The StayFit action could not be confirmed. It may already have been applied. Check the StayFit app or refresh the account before retrying."
+    },
+    "refresh_after_write_failed": {
+      "message": "StayFit confirmed the change, but refreshing the subscription failed. Do not repeat the action; refresh the account to update its sensors."
+    }
+  },
   "entity": {
     "binary_sensor": {
       "subscription_active": {
@@ -55,6 +162,9 @@
       },
       "subscription_type": {
         "name": "Subscription type"
+      },
+      "available_freeze_days": {
+        "name": "Available freeze days"
       }
     }
   }

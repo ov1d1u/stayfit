@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from asyncio import Lock
 
 from homeassistant.config_entries import ConfigEntryAuthFailed
 from homeassistant.core import HomeAssistant
@@ -34,6 +35,7 @@ class StayFitDataUpdateCoordinator(DataUpdateCoordinator[StayFitCoordinatorData]
             update_interval=UPDATE_INTERVAL,
         )
         self.client = client
+        self.action_lock = Lock()
 
     async def _async_update_data(self) -> StayFitCoordinatorData:
         try:
