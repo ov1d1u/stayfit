@@ -1,9 +1,12 @@
 """Tests for StayFit membership parsing and selection."""
 
-from datetime import date
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
 
 from custom_components.stayfit.models import (
     build_coordinator_data,
+    parse_checkins,
+    parse_dashboard,
     parse_memberships,
     select_primary_membership,
 )
@@ -116,3 +119,79 @@ def test_no_memberships_produces_empty_states() -> None:
     assert data.primary is None
     assert data.subscription_active is False
     assert data.active_subscription_freeze is False
+
+
+def test_parses_additional_membership_sensor_fields() -> None:
+    """Payment, penalties, and voucher counters retain valid API values."""
+    membership = parse_memberships(
+        [
+            {
+                **_membership("1", "2026-01-01", "2026-12-31"),
+                "recurrent": "1",
+                "next_payment_date": "2026-11-15 00:00:00",
+                "total_penalties": "2",
+                "penalty_limit": 5,
+                "slots_available": "3",
+            }
+        ]
+    )[0]
+
+    assert membership.recurrent is True
+    assert membership.next_payment_date == date(2026, 11, 15)
+    assert membership.total_penalties == 2
+    assert membership.penalty_limit == 5
+    assert membership.slots_available == 3
+
+
+def test_parses_dashboard_counters_and_checkins() -> None:
+    """Official dashboard and history response shapes become typed data."""
+    dashboard = parse_dashboard(
+        {
+            "member_activity_stats": {"checkins_30": "8"},
+            "unread_emails": 3,
+        }
+    )
+    checkins = parse_checkins(
+        {
+            "older": {
+                "date_checkin": "2026-10-08 10:00:00",
+                "club_name": "Stay Fit Central",
+            },
+            "newer": {
+                "date_checkin": "2026-10-09 18:30:00",
+                "club_name": "Stay Fit Unirii",
+            },
+        }
+    )
+
+    assert dashboard.checkins_last_30_days == 8
+    assert dashboard.unread_messages == 3
+    assert checkins[0].club == "Stay Fit Unirii"
+    assert checkins[0].checked_in_at == datetime(
+        2026, 10, 9, 18, 30, tzinfo=ZoneInfo("Europe/Bucharest")
+    )
+
+
+def test_malformed_optional_sensor_data_is_unknown() -> None:
+    """Optional counters never guess at malformed API values."""
+    membership = parse_memberships(
+        [
+            {
+                **_membership("1", "2026-01-01", "2026-12-31"),
+                "next_payment_date": "invalid",
+                "total_penalties": True,
+                "penalty_limit": "invalid",
+                "slots_available": None,
+            }
+        ]
+    )[0]
+    dashboard = parse_dashboard(
+        {"member_activity_stats": {"checkins_30": -1}, "unread_emails": "bad"}
+    )
+
+    assert membership.next_payment_date is None
+    assert membership.total_penalties is None
+    assert membership.penalty_limit is None
+    assert membership.slots_available is None
+    assert dashboard.checkins_last_30_days == -1
+    assert dashboard.unread_messages is None

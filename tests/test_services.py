@@ -29,7 +29,7 @@ from custom_components.stayfit.api import (
     StayFitTimeoutError,
 )
 from custom_components.stayfit.const import DOMAIN
-from custom_components.stayfit.models import parse_memberships
+from custom_components.stayfit.models import StayFitDashboardData, parse_memberships
 from custom_components.stayfit.services import (
     _get_freeze,
     _validate_freeze,
@@ -79,9 +79,19 @@ async def account_factory(hass: HomeAssistant, freezer):
             },
         )
         entry.add_to_hass(hass)
-        with patch(
-            "custom_components.stayfit.api.StayFitApiClient.async_get_memberships",
-            AsyncMock(return_value=parsed),
+        with (
+            patch(
+                "custom_components.stayfit.api.StayFitApiClient.async_get_memberships",
+                AsyncMock(return_value=parsed),
+            ),
+            patch(
+                "custom_components.stayfit.api.StayFitApiClient.async_get_dashboard",
+                AsyncMock(return_value=StayFitDashboardData(None, None)),
+            ),
+            patch(
+                "custom_components.stayfit.api.StayFitApiClient.async_get_latest_checkin",
+                AsyncMock(return_value=None),
+            ),
         ):
             assert await hass.config_entries.async_setup(entry.entry_id)
             await hass.async_block_till_done()

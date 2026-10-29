@@ -10,8 +10,16 @@ from typing import Any
 
 from aiohttp import ClientError, ClientSession
 
-from .const import API_BASE_URL, API_LANGUAGE_ID, API_PROJECT
-from .models import StayFitAccount, StayFitMembership, parse_memberships
+from .const import API_APP_VERSION, API_BASE_URL, API_LANGUAGE_ID, API_PROJECT
+from .models import (
+    StayFitAccount,
+    StayFitCheckIn,
+    StayFitDashboardData,
+    StayFitMembership,
+    parse_checkins,
+    parse_dashboard,
+    parse_memberships,
+)
 
 HTTP_TOO_MANY_REQUESTS = 429
 
@@ -190,6 +198,41 @@ class StayFitApiClient:
         if "membership" not in payload:
             raise StayFitInvalidResponseError
         return parse_memberships(payload.get("membership"))
+
+    async def async_get_dashboard(self, member_id: str) -> StayFitDashboardData:
+        """Fetch the counters displayed by the official app dashboard."""
+        payload = await self._post(
+            "member-get-dashboard-info.php",
+            data={
+                "project": API_PROJECT,
+                "mbid": member_id,
+                "lang": API_LANGUAGE_ID,
+                "device_type": "0",
+                "app_version": "3",
+                "app_version_store": API_APP_VERSION,
+            },
+            authenticated=True,
+        )
+        self._raise_response_error(payload)
+        return parse_dashboard(payload)
+
+    async def async_get_latest_checkin(self) -> StayFitCheckIn | None:
+        """Fetch the latest gym check-in and its club."""
+        payload = await self._post(
+            "member-get-checkins.php",
+            data={
+                "project": API_PROJECT,
+                "page": "1",
+                "articles_per_page": "1",
+            },
+            authenticated=True,
+        )
+        error = self._error_code(payload)
+        if error in {"MSG_NO_CHECKINS_FOUND", "NO_CHECKINS"}:
+            return None
+        self._raise_response_error(payload)
+        checkins = parse_checkins(payload.get("checkins"))
+        return checkins[0] if checkins else None
 
     async def async_freeze_subscription(
         self, subscription_id: str, start_date: date, days: int

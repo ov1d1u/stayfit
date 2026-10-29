@@ -12,7 +12,10 @@ from homeassistant.helpers.typing import ConfigType
 
 from .api import StayFitApiClient
 from .const import CONF_DISPLAY_NAME, CONF_MEMBER_ID, CONF_TOKEN
-from .coordinator import StayFitDataUpdateCoordinator
+from .coordinator import (
+    StayFitActivityDataUpdateCoordinator,
+    StayFitDataUpdateCoordinator,
+)
 from .services import async_setup_services
 
 PLATFORMS: list[Platform] = [Platform.BINARY_SENSOR, Platform.SENSOR]
@@ -23,6 +26,7 @@ class StayFitRuntimeData:
     """Runtime data for one StayFit config entry."""
 
     coordinator: StayFitDataUpdateCoordinator
+    activity_coordinator: StayFitActivityDataUpdateCoordinator
     member_id: str
     display_name: str
 
@@ -43,9 +47,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: StayFitConfigEntry) -> b
     )
     coordinator = StayFitDataUpdateCoordinator(hass, client)
     await coordinator.async_config_entry_first_refresh()
+    activity_coordinator = StayFitActivityDataUpdateCoordinator(
+        hass, client, entry.data[CONF_MEMBER_ID]
+    )
+    # Activity endpoints are optional account features. Keep membership entities
+    # available if either endpoint is temporarily unavailable during setup.
+    await activity_coordinator.async_refresh()
 
     entry.runtime_data = StayFitRuntimeData(
         coordinator=coordinator,
+        activity_coordinator=activity_coordinator,
         member_id=entry.data[CONF_MEMBER_ID],
         display_name=entry.data[CONF_DISPLAY_NAME],
     )

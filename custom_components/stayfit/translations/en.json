@@ -165,6 +165,27 @@
       },
       "available_freeze_days": {
         "name": "Available freeze days"
+      },
+      "last_gym_checkin": {
+        "name": "Last gym check-in"
+      },
+      "checkins_last_30_days": {
+        "name": "Check-ins in the last 30 days"
+      },
+      "next_recurring_payment_date": {
+        "name": "Next recurring payment date"
+      },
+      "active_penalties": {
+        "name": "Active penalties"
+      },
+      "penalties_remaining": {
+        "name": "Penalties remaining"
+      },
+      "unread_app_messages": {
+        "name": "Unread app messages"
+      },
+      "guest_pass_vouchers_available": {
+        "name": "Guest-pass vouchers available"
       }
     }
   }

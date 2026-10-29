@@ -16,7 +16,7 @@ from custom_components.stayfit.api import (
     StayFitRateLimitError,
     StayFitTimeoutError,
 )
-from custom_components.stayfit.const import API_PROJECT
+from custom_components.stayfit.const import API_APP_VERSION, API_PROJECT
 
 
 @pytest.mark.asyncio
@@ -117,6 +117,88 @@ async def test_no_memberships_is_not_an_error() -> None:
                     session, token="secret-token"
                 ).async_get_memberships()
                 == ()
+            )
+
+
+@pytest.mark.asyncio
+async def test_dashboard_request_and_response() -> None:
+    """Dashboard polling matches the official app and parses requested counters."""
+    with aioresponses() as mocked:
+        async with ClientSession() as session:
+            mocked.post(
+                re.compile(
+                    r"https://api\.upfit\.cloud/member-get-dashboard-info\.php.*"
+                ),
+                payload={
+                    "member_activity_stats": {"checkins_30": "7"},
+                    "unread_emails": "4",
+                },
+            )
+            dashboard = await StayFitApiClient(
+                session, token="secret-token"
+            ).async_get_dashboard("123")
+
+    assert dashboard.checkins_last_30_days == 7
+    assert dashboard.unread_messages == 4
+    request = next(iter(mocked.requests.values()))[0]
+    assert request.kwargs["headers"]["Auth"] == "Bearer secret-token"
+    assert request.kwargs["data"] == {
+        "project": API_PROJECT,
+        "mbid": "123",
+        "lang": "2",
+        "device_type": "0",
+        "app_version": "3",
+        "app_version_store": API_APP_VERSION,
+    }
+
+
+@pytest.mark.asyncio
+async def test_latest_checkin_request_and_response() -> None:
+    """The latest check-in retains both its timestamp and club."""
+    with aioresponses() as mocked:
+        async with ClientSession() as session:
+            mocked.post(
+                re.compile(r"https://api\.upfit\.cloud/member-get-checkins\.php.*"),
+                payload={
+                    "checkins": {
+                        "1": {
+                            "date_checkin": "2026-10-09 18:30:00",
+                            "club_name": "Stay Fit Unirii",
+                        }
+                    }
+                },
+            )
+            checkin = await StayFitApiClient(
+                session, token="secret-token"
+            ).async_get_latest_checkin()
+
+    assert checkin is not None
+    assert checkin.club == "Stay Fit Unirii"
+    assert checkin.checked_in_at is not None
+    assert checkin.checked_in_at.isoformat() == "2026-10-09T18:30:00+03:00"
+    request = next(iter(mocked.requests.values()))[0]
+    assert request.kwargs["headers"]["Auth"] == "Bearer secret-token"
+    assert request.kwargs["data"] == {
+        "project": API_PROJECT,
+        "page": "1",
+        "articles_per_page": "1",
+    }
+
+
+@pytest.mark.asyncio
+async def test_no_checkins_is_not_an_error() -> None:
+    """An account without check-ins has an unknown latest visit."""
+    with aioresponses() as mocked:
+        async with ClientSession() as session:
+            mocked.post(
+                re.compile(r"https://api\.upfit\.cloud/member-get-checkins\.php.*"),
+                payload={"error": "MSG_NO_CHECKINS_FOUND"},
+            )
+            assert (
+                await StayFitApiClient(
+                    session, token="secret-token"
+                ).async_get_latest_checkin()
+                is None
             )
 
 

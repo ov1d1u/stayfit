@@ -8,6 +8,8 @@ DOMAIN: Final = "stayfit"
 API_BASE_URL: Final = "https://api.upfit.cloud"
 API_PROJECT: Final = "STAYFITGYM"
 API_LANGUAGE_ID: Final = "2"
+API_APP_VERSION: Final = "4.2606.33"
+API_TIME_ZONE: Final = "Europe/Bucharest"
 
 CONF_TOKEN: Final = "token"
 CONF_MEMBER_ID: Final = "member_id"

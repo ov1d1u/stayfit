@@ -5,7 +5,7 @@ account. It communicates with the same cloud API as the official Android app.
 
 ## Entities
 
-Each configured account creates one Home Assistant device with five entities:
+Each configured account creates one Home Assistant device with twelve entities:
 
 - **Subscription active**
 - **Active subscription freeze**
@@ -15,6 +15,15 @@ Each configured account creates one Home Assistant device with five entities:
   minus used freeze days, never below zero. The value is unknown when StayFit
   does not provide valid allowance data. Remaining freeze-use limits and other
   eligibility rules still apply when creating a freeze.
+- **Last gym check-in** — timestamp of the newest check-in, with the club name
+  exposed as an attribute.
+- **Check-ins in the last 30 days**
+- **Next recurring payment date**
+- **Active penalties**
+- **Penalties remaining** — the primary subscription's penalty limit minus its
+  active penalties, never below zero.
+- **Unread app messages**
+- **Guest-pass vouchers available**
 
 When an account contains several memberships, the integration selects the
 active membership with the latest expiration date. If none is active, it uses
@@ -41,7 +50,7 @@ Go to **Settings → Devices & services → Add integration**, search for
 
 The password/PIN is only used during authentication and is not retained in the
 Home Assistant config entry. Multiple distinct StayFit accounts can be added.
-Membership data is refreshed once per hour.
+Membership, activity, and inbox data are refreshed once per hour.
 
 ## Freeze and unfreeze actions
 

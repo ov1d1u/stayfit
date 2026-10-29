@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from typing import Any
+from zoneinfo import ZoneInfo
+
+from .const import API_TIME_ZONE
 
 
 @dataclass(frozen=True, slots=True)
@@ -55,6 +58,10 @@ class StayFitMembership:
     count_freeze: int | None = None
     freeze_add_interval: int | None = None
     recurrent: bool | None = None
+    next_payment_date: date | None = None
+    total_penalties: int | None = None
+    penalty_limit: int | None = None
+    slots_available: int | None = None
 
     def covers(self, today: date) -> bool:
         """Return whether today falls inside the membership period."""
@@ -71,6 +78,31 @@ class StayFitMembership:
     def has_active_freeze(self, today: date) -> bool:
         """Return whether any non-cancelled freeze is active."""
         return any(freeze.is_active(today) for freeze in self.freezes)
+
+
+@dataclass(frozen=True, slots=True)
+class StayFitCheckIn:
+    """One gym check-in returned by StayFit."""
+
+    checked_in_at: datetime | None
+    club: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class StayFitDashboardData:
+    """Account counters returned by the official app's dashboard endpoint."""
+
+    checkins_last_30_days: int | None
+    unread_messages: int | None
+
+
+@dataclass(frozen=True, slots=True)
+class StayFitActivityData:
+    """Activity state consumed by account-level sensors."""
+
+    latest_checkin: StayFitCheckIn | None
+    checkins_last_30_days: int | None
+    unread_messages: int | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -91,6 +123,19 @@ def parse_date(value: Any) -> date | None:
         return date.fromisoformat(value[:10])
     except ValueError:
         return None
+
+
+def parse_datetime(value: Any) -> datetime | None:
+    """Parse an API timestamp and apply the gym's zone when it is omitted."""
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.strip())
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=ZoneInfo(API_TIME_ZONE))
+    return parsed
 
 
 def parse_integer(value: Any) -> int | None:
@@ -140,6 +185,48 @@ def parse_freezes(value: Any) -> tuple[StayFitFreeze, ...]:
     )
 
 
+def parse_checkins(value: Any) -> tuple[StayFitCheckIn, ...]:
+    """Parse check-ins and return newest valid timestamps first."""
+    checkins = tuple(
+        StayFitCheckIn(
+            checked_in_at=parse_datetime(item.get("date_checkin")),
+            club=(
+                str(item["club_name"]).strip()
+                if item.get("club_name") not in (None, "")
+                else None
+            ),
+        )
+        for item in _normalise_objects(
+            value, marker_fields=frozenset({"date_checkin", "club_name"})
+        )
+    )
+    return tuple(
+        sorted(
+            checkins,
+            key=lambda item: (
+                item.checked_in_at is not None,
+                item.checked_in_at.timestamp() if item.checked_in_at else 0,
+            ),
+            reverse=True,
+        )
+    )
+
+
+def parse_dashboard(value: Any) -> StayFitDashboardData:
+    """Parse dashboard counters while tolerating disabled optional modules."""
+    if not isinstance(value, dict):
+        return StayFitDashboardData(None, None)
+    activity = value.get("member_activity_stats")
+    return StayFitDashboardData(
+        checkins_last_30_days=(
+            parse_integer(activity.get("checkins_30"))
+            if isinstance(activity, dict)
+            else None
+        ),
+        unread_messages=parse_integer(value.get("unread_emails")),
+    )
+
+
 def parse_memberships(value: Any) -> tuple[StayFitMembership, ...]:
     """Parse memberships from an API response."""
     memberships: list[StayFitMembership] = []
@@ -172,6 +259,10 @@ def parse_memberships(value: Any) -> tuple[StayFitMembership, ...]:
                     if (value := parse_integer(item.get("recurrent"))) in (0, 1)
                     else None
                 ),
+                next_payment_date=parse_date(item.get("next_payment_date")),
+                total_penalties=parse_integer(item.get("total_penalties")),
+                penalty_limit=parse_integer(item.get("penalty_limit")),
+                slots_available=parse_integer(item.get("slots_available")),
             )
         )
     return tuple(memberships)
@@ -233,4 +324,15 @@ def build_coordinator_data(
         active_subscription_freeze=(
             primary.has_active_freeze(today) if primary else False
         ),
+    )
+
+
+def build_activity_data(
+    dashboard: StayFitDashboardData, latest_checkin: StayFitCheckIn | None
+) -> StayFitActivityData:
+    """Build account activity state from the two official app endpoints."""
+    return StayFitActivityData(
+        latest_checkin=latest_checkin,
+        checkins_last_30_days=dashboard.checkins_last_30_days,
+        unread_messages=dashboard.unread_messages,
     )
